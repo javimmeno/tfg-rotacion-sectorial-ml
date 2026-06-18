@@ -308,6 +308,42 @@ fig.tight_layout()
 fig.savefig(os.path.join(OUT_DIR, "fig_feature_importance.png"), bbox_inches="tight")
 plt.close()
 
+# ───── Figura 7: Rank IC fuera de muestra por año ─────
+print("Generando fig_rank_ic_oos.png...")
+
+# Rank IC anual del modelo LightGBM en el walk-forward fuera de muestra,
+# recalculado a partir de las predicciones guardadas por m04.
+preds = pd.read_parquet(os.path.join(DATA_DIR, "predictions.parquet"))
+preds["date"] = pd.to_datetime(preds["date"])
+
+ic_by_year = {}
+for year in sorted(preds["date"].dt.year.unique()):
+    yd = preds[preds["date"].dt.year == year]
+    ics = []
+    for _, g in yd.groupby("date"):
+        ics.append(g[["target_rank", "pred_lgbm"]].corr(method="spearman").iloc[0, 1])
+    ic_by_year[year] = float(np.nanmean(ics))
+
+years = [str(y) for y in ic_by_year.keys()]
+ic_vals = list(ic_by_year.values())
+VALIDATION_IC = 0.054  # rank IC medio en validacion (Tabla 5)
+
+fig, ax = plt.subplots(figsize=(9, 4.5))
+bar_colors = [COLORS["LightGBM"] if v >= 0 else "#7f7f7f" for v in ic_vals]
+ax.bar(years, ic_vals, color=bar_colors, edgecolor="white", width=0.65)
+ax.axhline(0, color="black", linewidth=0.8)
+ax.axhline(VALIDATION_IC, color="#1f77b4", linestyle="--", linewidth=1.2,
+           label=f"Rank IC en validación ({VALIDATION_IC:.3f})")
+ax.set_ylabel("Rank IC medio anual")
+ax.set_xlabel("Año (walk-forward fuera de muestra)")
+ax.legend(loc="upper left", fontsize=8)
+for i, v in enumerate(ic_vals):
+    ax.text(i, v + (0.012 if v >= 0 else -0.012), f"{v:.2f}",
+            ha="center", va="bottom" if v >= 0 else "top", fontsize=8)
+    ax.set_ylim(min(ic_vals) - 0.05, max(max(ic_vals), VALIDATION_IC) + 0.05)
+fig.tight_layout()
+fig.savefig(os.path.join(OUT_DIR, "fig_rank_ic_oos.png"), bbox_inches="tight")
+plt.close()
 
 # ─────
 print()
